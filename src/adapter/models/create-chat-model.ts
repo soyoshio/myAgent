@@ -1,18 +1,14 @@
-import type { ChatModel } from "../../application/ports/chat-model";
+import type { AgentModelFactory } from "../../application/ports/agent-model-factory";
 import { AnthropicModel } from "./anthropic-model";
 import { OpenAIModel } from "./openai-model";
 
-export function createChatModel(): ChatModel {
-  const provider = (process.env.MODEL_PROVIDER ?? "openai").toLowerCase();
-
-  switch (provider) {
+export const createChatModel: AgentModelFactory = (model) => {
+  switch (model.provider) {
     case "openai":
-      return new OpenAIModel();
+      return new OpenAIModel(model);
     case "anthropic":
-      return new AnthropicModel();
+      return new AnthropicModel(model);
     default:
-      throw new Error(
-        `不支持的 MODEL_PROVIDER: ${provider}，可选值为 openai 或 anthropic。`,
-      );
+      throw new Error(`不支持的模型厂商: ${model.provider}`);
   }
-}
+};

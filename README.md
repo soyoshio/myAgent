@@ -1,44 +1,99 @@
 # myAgent
 
-一个使用 TypeScript 编写的简单命令行智能体，按领域层、应用层和适配层组织代码，支持 OpenAI 与 Anthropic。
+一个使用 TypeScript 编写的简单智能体库，按领域层、应用层和适配层组织代码，支持 OpenAI 与 Anthropic。
 
 ## 目录结构
 
 ```text
 src/
 ├── domain/
-│   └── context.ts                  # 消息与聊天上下文接口
+│   ├── context.ts                  # 消息与历史读写接口
+│   ├── agent.ts                    # 用户上下文与每轮准备接口
+│   └── model.ts                    # 模型配置与厂商类型
 ├── application/
-│   ├── chat-loop.ts                # 输入、调用模型、保存回答的聊天循环
+│   ├── agent.ts                    # Agent 入口，调用模型并保存历史
+│   ├── agent-runner.ts             # 通过模型工厂执行调用
 │   └── ports/
-│       ├── chat-model.ts           # 应用层模型接口
-│       └── chat-io.ts              # 应用层输入输出接口
+│       ├── agent-model-factory.ts  # 模型工厂接口
+│       └── chat-model.ts           # 应用层模型接口
 ├── adapter/
-│   ├── cli/
-│   │   └── readline-chat-io.ts     # 终端输入输出实现
 │   ├── context/
 │   │   └── in-memory-context.ts    # 内存上下文实现
 │   └── models/
 │       ├── openai-model.ts         # OpenAI API
 │       ├── anthropic-model.ts      # Anthropic API
-│       └── create-chat-model.ts    # 根据环境变量选择厂商
-└── index.ts                        # 依赖组装与程序入口
+│       └── create-chat-model.ts    # 按厂商实例化模型
+├── create-agent.ts                 # 组合适配器与应用层
+├── cli.ts                          # 命令行入口
+└── index.ts                        # 公共 API 导出
 ```
 
-- `domain`：只包含核心概念，不依赖外部技术。
-- `application`：实现内部业务流程，通过接口依赖模型和输入输出。
-- `adapter`：实现外部 API、终端和存储等技术细节。
-- `index.ts`：组合各层实现，业务层不直接依赖具体厂商。
+- `domain` 定义用户上下文、对话消息和模型信息。
+- `application` 负责每轮的消息准备、模型调用和历史保存。`AgentRunner` 通过模型工厂为每次调用创建模型。
+- `adapter` 实现厂商 API 和内存历史存储。模型适配器接收模型信息和准备好的消息。
+- `create-agent.ts` 组装适配器和应用层，提供 `createAgent(context, modelInfo)`。
+- `index.ts` 只作为包入口，导出公共 API 和类型。
+- `cli.ts` 是命令行启动入口。
 
-## 运行
+## 使用
 
 要求 Node.js 22 或更高版本。
 
-### 配置环境变量
+### 创建 Agent
 
-程序启动时会自动读取根目录的 `.env`。项目已提供 `.env` 和 `.env.example`，在 `.env` 中填写自己的 API Key 即可；该文件已被 Git 忽略，不要提交真实密钥。
+```ts
+import { createAgent, InMemoryContext } from "myagent";
 
-使用 OpenAI：
+const apiKey = process.env.OPENAI_API_KEY;
+if (!apiKey) throw new Error("请设置 OPENAI_API_KEY 环境变量。");
+
+const context = new InMemoryContext([
+  { role: "system", content: "你是一个简洁、友好的中文智能体。" },
+]);
+
+const agent = createAgent(context, {
+  provider: "openai",
+  name: "gpt-4o-mini",
+  apiKey,
+  baseURL: "https://api.openai.com/v1",
+});
+const answer = await agent.complete("你好");
+```
+
+`ModelInfo.provider` 只接受 `"openai"` 和 `"anthropic"`。两者均使用 `name`、`apiKey`、`baseURL`，也可传入 `maxTokens` 和 `temperature`。OpenAI 兼容服务的地址通常包含 `/v1`。Anthropic 适配器会拼接 `/v1/messages`，其 `baseURL` 可以是 `https://api.anthropic.com`。如果使用 `.env` 文件，可由调用方加载，例如 `node --env-file=.env app.js`。
+
+### 自定义上下文
+
+实现 `AgentContext`，或者继承 `InMemoryContext`。`InMemoryContext` 默认原样返回本轮消息，子类可以覆盖 `prepareMessages()`。比如传入项目名称，让每轮请求都带上项目说明。
+
+```ts
+import { InMemoryContext, type ChatMessage } from "myagent";
+
+class ProjectContext extends InMemoryContext {
+  constructor(readonly projectName: string) {
+    super();
+  }
+
+  override prepareMessages(messages: readonly ChatMessage[]): readonly ChatMessage[] {
+    return [
+      { role: "system", content: `当前项目为 ${this.projectName}。` },
+      ...messages,
+    ];
+  }
+}
+
+const projectContext = new ProjectContext("myAgent");
+```
+
+- `getMessages()` 读取已保存的历史，可以同步或异步返回。
+- 可选的 `prepareMessages()` 在每次模型调用前收到历史和本轮用户消息。它可以读取或更新上下文里的自定义数据，同步或异步返回本轮发给模型的消息。
+- `addMessages()` 在模型成功后一次性保存本轮用户原始消息和模型回复。自定义存储应将一轮的消息一起提交。准备阶段加入的临时消息只用于当前请求。
+
+同一个 Agent 的 `complete()` 按调用顺序执行。每段独立对话请传入独立的上下文实例。`InMemoryContext` 的历史会在上下文实例存续期间保留。
+
+## 命令行运行
+
+命令行入口会自动加载项目根目录的 `.env`，并从中读取模型配置：
 
 ```dotenv
 MODEL_PROVIDER=openai
@@ -47,31 +102,29 @@ OPENAI_MODEL=gpt-4o-mini
 OPENAI_BASE_URL=https://api.openai.com/v1
 ```
 
-`OPENAI_BASE_URL` 用于设置 OpenAI 或兼容服务的 API 基础地址。使用代理或兼容服务时，将其设置为对应服务的基础地址，通常需要包含 `/v1`。
+使用 Anthropic 时设置 `MODEL_PROVIDER=anthropic`，并提供 `ANTHROPIC_API_KEY`、`ANTHROPIC_MODEL` 和 `ANTHROPIC_BASE_URL`。
 
-使用 Anthropic：
-
-```dotenv
-MODEL_PROVIDER=anthropic
-ANTHROPIC_API_KEY=你的 API Key
-ANTHROPIC_MODEL=claude-3-5-haiku-latest
-ANTHROPIC_BASE_URL=https://api.anthropic.com
-```
-
-`ANTHROPIC_BASE_URL` 用于设置 Anthropic 或兼容服务的 API 基础地址。适配器会自动拼接 `/v1/messages`，因此这里只需填写基础地址，不要重复添加接口路径，末尾也不要带 `/`。
-
-配置完成后启动：
+开发模式下直接运行：
 
 ```sh
 npm run dev
 ```
 
-启动后输入消息即可聊天，输入 `exit` 或 `quit` 退出。当前上下文只保存在内存中，程序退出后对话记录会清除。
+生产构建后运行：
+
+```sh
+npm start
+```
+
+`npm start` 会先自动执行构建。没有参数时进入交互模式，输入 `exit` 或 `quit` 退出；也可以只调用一次：
+
+```sh
+npm start -- "你好"
+```
 
 ## 构建
 
 ```sh
 npm run typecheck
 npm run build
-npm start
 ```

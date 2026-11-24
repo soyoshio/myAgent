@@ -1,7 +1,8 @@
-import type { ChatContext, ChatMessage } from "../../domain/context";
+import type { AgentContext } from "../../domain/agent";
+import type { ChatMessage } from "../../domain/context";
 
-export class InMemoryContext implements ChatContext {
-  private messages: ChatMessage[];
+export class InMemoryContext implements AgentContext {
+  private readonly messages: ChatMessage[];
 
   constructor(initialMessages: readonly ChatMessage[] = []) {
     this.messages = [...initialMessages];
@@ -11,7 +12,13 @@ export class InMemoryContext implements ChatContext {
     return [...this.messages];
   }
 
-  addMessage(message: ChatMessage): void {
-    this.messages.push(message);
+  prepareMessages(
+    messages: readonly ChatMessage[],
+  ): readonly ChatMessage[] | Promise<readonly ChatMessage[]> {
+    return messages;
+  }
+
+  addMessages(messages: readonly ChatMessage[]): void {
+    this.messages.push(...messages);
   }
 }
