@@ -44,8 +44,7 @@ async function main(): Promise<void> {
     new InMemoryContext([
       { role: "system", content: "你是一个简洁、友好的中文智能体。" },
     ]),
-    loadModelConfigFromEnv(),
-    [new ClockTool()],
+    { model: loadModelConfigFromEnv(), tools: [new ClockTool()] },
   );
 
   const printAnswer = async (input: string): Promise<void> => {

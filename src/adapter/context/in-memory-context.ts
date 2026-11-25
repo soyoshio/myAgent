@@ -12,6 +12,7 @@ export class InMemoryContext implements AgentContext {
     return [...this.messages];
   }
 
+  /** 默认原样返回输入消息。 */
   prepareMessages(
     messages: readonly ChatMessage[],
   ): readonly ChatMessage[] | Promise<readonly ChatMessage[]> {

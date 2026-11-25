@@ -1,7 +1,7 @@
-import type { AgentContext } from "../domain/agent";
+import type { AgentContext, AgentRuntime } from "../domain/agent";
 import type { ChatMessage } from "../domain/context";
-import type { Tool } from "../domain/tool";
-import type { AssistantReply, ChatModel } from "./ports/chat-model";
+import type { AgentModelFactory } from "./ports/agent-model-factory";
+import type { AssistantReply } from "./ports/chat-model";
 
 function parseArguments(raw: string): unknown {
   const text = raw.trim();
@@ -18,9 +18,8 @@ function describeError(error: unknown): string {
 
 export class AgentLoop {
   constructor(
-    private readonly model: ChatModel,
-    private readonly tools: readonly Tool[] = [],
-    private readonly maxSteps = 8,
+    private readonly createModel: AgentModelFactory,
+    private readonly runtime: AgentRuntime,
   ) {}
 
   complete(context: AgentContext, userMessage: ChatMessage): Promise<string> {
@@ -49,24 +48,33 @@ export class AgentLoop {
     userMessage: ChatMessage,
     streamed: boolean,
   ): AsyncGenerator<string, string> {
-    const toolsByName = new Map(
-      this.tools.map((tool) => [tool.name, tool] as const),
-    );
-
     const history = await context.getMessages();
     const baseMessages: readonly ChatMessage[] = [...history, userMessage];
+
+    const runtime = this.runtime.prepare
+      ? await this.runtime.prepare(context, baseMessages)
+      : this.runtime;
+    const model = this.createModel(runtime.model);
+    const tools = runtime.tools;
+    const maxSteps = runtime.maxSteps ?? 8;
+    const toolsByName = new Map(
+      tools.map((tool) => [tool.name, tool] as const),
+    );
+
     const prepared: readonly ChatMessage[] = context.prepareMessages
-      ? await context.prepareMessages(baseMessages)
+      ? await context.prepareMessages(baseMessages, runtime)
       : baseMessages;
+    // 模型每一步都读取这份工作列表，包括准备阶段补充的消息。
     const messages: ChatMessage[] = [...prepared];
+    // 单独记录本轮新增消息，收到最终回复后统一写入历史。
     const added: ChatMessage[] = [userMessage];
 
-    for (let step = 0; step < this.maxSteps; step++) {
+    for (let step = 0; step < maxSteps; step++) {
       let reply: AssistantReply;
       if (streamed) {
-        reply = yield* this.model.stream([...messages], this.tools);
+        reply = yield* model.stream([...messages], tools);
       } else {
-        reply = await this.model.complete([...messages], this.tools);
+        reply = await model.complete([...messages], tools);
       }
 
       const assistantMessage: ChatMessage = {
@@ -99,6 +107,7 @@ export class AgentLoop {
           }
         }
 
+        // 成功和失败都按原调用 ID 回填，供模型下一步处理。
         const toolMessage: ChatMessage = {
           role: "tool",
           content: output,
@@ -109,6 +118,6 @@ export class AgentLoop {
       }
     }
 
-    throw new Error(`超过最大工具调用轮数：${this.maxSteps}。`);
+    throw new Error(`超过最大工具调用轮数：${maxSteps}。`);
   }
 }

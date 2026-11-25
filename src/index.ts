@@ -4,7 +4,10 @@ export { ClockTool } from "./adapter/tools/clock-tool";
 export { AbstractAgentTool } from "./application/agent-tool";
 export type { Agent } from "./application/agent";
 export type { AssistantReply, ChatModel } from "./application/ports/chat-model";
-export type { AgentContext } from "./domain/agent";
+export type {
+  AgentContext,
+  AgentRuntime,
+} from "./domain/agent";
 export type {
   AssistantMessage,
   ChatContext,
