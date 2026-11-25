@@ -16,4 +16,11 @@ export class AgentRunner implements ChatModel {
   ): Promise<AssistantReply> {
     return this.createModel(this.modelConfig).complete(messages, tools);
   }
+
+  stream(
+    messages: readonly ChatMessage[],
+    tools: readonly Tool[],
+  ): AsyncGenerator<string, AssistantReply> {
+    return this.createModel(this.modelConfig).stream(messages, tools);
+  }
 }

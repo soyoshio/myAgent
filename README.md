@@ -34,7 +34,7 @@ src/
 ```
 
 - `domain` 定义用户上下文、对话消息、模型配置和工具契约。`Tool` 包含名称、描述、参数 Schema 以及 `execute(input, context)`。对话消息是判别联合：`system` / `user` / `assistant`（可带 `toolCalls`）/ `tool`（带 `toolCallId`）。
-- `application` 负责智能体循环：把历史和本轮消息连同工具定义交给模型，模型请求工具时执行并回填，直到模型给出最终文本。`AgentLoop` 组织循环（默认最多 8 轮），`AgentRunner` 通过模型工厂为每次调用创建模型。
+- `application` 负责智能体循环：把历史和本轮消息连同工具定义交给模型，模型请求工具时执行并回填，直到模型给出最终文本。`AgentLoop` 组织循环（默认最多 8 轮），支持一次性与流式调用；`AgentRunner` 通过模型工厂为每次调用创建模型。
 - `adapter` 实现厂商 API、内存历史存储和具体工具。OpenAI / Anthropic 适配器会把工具定义注入请求，并把模型返回的工具调用解析成统一的 `ToolCall`。
 - `create-agent.ts` 组装适配器和应用层，提供 `createAgent(context, modelConfig, tools)`。
 - `index.ts` 只作为包入口，导出公共 API 和类型。
@@ -125,6 +125,16 @@ const agent = createAgent(context, modelConfig, [clock]);
 
 `ModelConfig.provider` 只接受 `"openai"` 和 `"anthropic"`。两者均使用 `name`、`apiKey`、`baseURL`，也可传入 `maxTokens` 和 `temperature`。OpenAI 兼容服务的地址通常包含 `/v1`。Anthropic 适配器会拼接 `/v1/messages`，其 `baseURL` 可以是 `https://api.anthropic.com`。如果使用 `.env` 文件，可由调用方加载，例如 `node --env-file=.env app.js`。
 
+### 流式输出
+
+```ts
+for await (const delta of agent.stream("你好")) {
+  process.stdout.write(delta);
+}
+```
+
+`stream()` 逐段产出文本片段；工具调用轮次也会正常执行（工具结果不作为片段产出）。`complete()` 仍是一次性调用，返回最终文本。
+
 ### 自定义上下文
 
 实现 `AgentContext`，或者继承 `InMemoryContext`。`InMemoryContext` 默认原样返回本轮消息，子类可以覆盖 `prepareMessages()`。比如传入项目名称，让每轮请求都带上项目说明。
@@ -152,7 +162,7 @@ const projectContext = new ProjectContext("myAgent");
 - 可选的 `prepareMessages()` 在进入循环前收到历史与本轮用户消息，用于构建首轮发给模型的消息；后续工具往返不会重复调用。它可以读取或更新上下文里的自定义数据，同步或异步返回。
 - `addMessages()` 在整轮成功后一次性保存本轮用户消息、工具调用/结果和模型回复。自定义存储应将一轮的消息一起提交。准备阶段加入的临时消息只用于当前请求。
 
-同一个 Agent 的 `complete()` 按调用顺序执行。每段独立对话请传入独立的上下文实例。`InMemoryContext` 的历史会在上下文实例存续期间保留。
+同一个 Agent 的 `complete()` 和 `stream()` 按调用顺序执行。每段独立对话请传入独立的上下文实例。`InMemoryContext` 的历史会在上下文实例存续期间保留。
 
 ## 命令行运行
 
@@ -179,7 +189,7 @@ npm run dev
 npm start
 ```
 
-`npm start` 会先自动执行构建。没有参数时进入交互模式，输入 `exit` 或 `quit` 退出；也可以只调用一次：
+`npm start` 会先自动执行构建。没有参数时进入交互模式，输入 `exit` 或 `quit` 退出；也可以只调用一次。输出会边生成边打印：
 
 ```sh
 npm start -- "你好"

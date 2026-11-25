@@ -1,7 +1,7 @@
 import type { AgentContext } from "../domain/agent";
 import type { ChatMessage } from "../domain/context";
 import type { Tool } from "../domain/tool";
-import type { ChatModel } from "./ports/chat-model";
+import type { AssistantReply, ChatModel } from "./ports/chat-model";
 
 function parseArguments(raw: string): unknown {
   const text = raw.trim();
@@ -23,10 +23,32 @@ export class AgentLoop {
     private readonly maxSteps = 8,
   ) {}
 
-  async complete(
+  complete(context: AgentContext, userMessage: ChatMessage): Promise<string> {
+    return this.drive(this.run(context, userMessage, false));
+  }
+
+  stream(
     context: AgentContext,
     userMessage: ChatMessage,
-  ): Promise<string> {
+  ): AsyncGenerator<string, string> {
+    return this.run(context, userMessage, true);
+  }
+
+  /** 消费循环生成器，丢弃文本片段，只取最终答案。 */
+  private async drive(gen: AsyncGenerator<string, string>): Promise<string> {
+    for (;;) {
+      const { value, done } = await gen.next();
+      if (done) {
+        return value;
+      }
+    }
+  }
+
+  private async *run(
+    context: AgentContext,
+    userMessage: ChatMessage,
+    streamed: boolean,
+  ): AsyncGenerator<string, string> {
     const toolsByName = new Map(
       this.tools.map((tool) => [tool.name, tool] as const),
     );
@@ -40,7 +62,12 @@ export class AgentLoop {
     const added: ChatMessage[] = [userMessage];
 
     for (let step = 0; step < this.maxSteps; step++) {
-      const reply = await this.model.complete([...messages], this.tools);
+      let reply: AssistantReply;
+      if (streamed) {
+        reply = yield* this.model.stream([...messages], this.tools);
+      } else {
+        reply = await this.model.complete([...messages], this.tools);
+      }
 
       const assistantMessage: ChatMessage = {
         role: "assistant",
