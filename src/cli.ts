@@ -48,9 +48,16 @@ async function main(): Promise<void> {
     [new ClockTool()],
   );
 
+  const printAnswer = async (input: string): Promise<void> => {
+    for await (const delta of agent.stream(input)) {
+      stdout.write(delta);
+    }
+    stdout.write("\n");
+  };
+
   const question = process.argv.slice(2).join(" ").trim();
   if (question) {
-    console.log(await agent.complete(question));
+    await printAnswer(question);
     return;
   }
 
@@ -66,7 +73,8 @@ async function main(): Promise<void> {
       }
 
       try {
-        console.log(`智能体: ${await agent.complete(input)}`);
+        stdout.write("智能体: ");
+        await printAnswer(input);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.error(`调用模型失败: ${message}`);

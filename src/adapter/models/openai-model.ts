@@ -3,7 +3,7 @@ import type {
   AssistantReply,
   ChatModel,
 } from "../../application/ports/chat-model";
-import type { ChatMessage } from "../../domain/context";
+import type { ChatMessage, ToolCall } from "../../domain/context";
 import type { ModelConfig } from "../../domain/model";
 import type { Tool } from "../../domain/tool";
 
@@ -38,6 +38,12 @@ function toOpenAIMessage(message: ChatMessage): OpenAIMessage {
         tool_call_id: message.toolCallId,
       };
   }
+}
+
+interface PartialToolCall {
+  id: string;
+  name: string;
+  arguments: string;
 }
 
 export class OpenAIModel implements ChatModel {
@@ -92,6 +98,84 @@ export class OpenAIModel implements ChatModel {
     );
     const content = message.content?.trim() ?? "";
 
+    if (content.length === 0 && toolCalls.length === 0) {
+      throw new Error("OpenAI 未返回文本内容。");
+    }
+
+    return { content, toolCalls };
+  }
+
+  async *stream(
+    messages: readonly ChatMessage[],
+    tools: readonly Tool[],
+  ): AsyncGenerator<string, AssistantReply> {
+    const { name, maxTokens, temperature } = this.modelConfig;
+    const response = await this.client.chat.completions.create({
+      model: name,
+      ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
+      ...(temperature === undefined ? {} : { temperature }),
+      messages: messages.map(toOpenAIMessage),
+      ...(tools.length === 0
+        ? {}
+        : {
+            tools: tools.map((tool) => ({
+              type: "function" as const,
+              function: {
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.inputSchema,
+              },
+            })),
+          }),
+      stream: true,
+    });
+
+    let text = "";
+    const partialCalls: Array<PartialToolCall | undefined> = [];
+
+    for await (const chunk of response) {
+      const delta = chunk.choices[0]?.delta;
+      if (delta === undefined) {
+        continue;
+      }
+
+      const content = delta.content;
+      if (typeof content === "string" && content.length > 0) {
+        text += content;
+        yield content;
+      }
+
+      for (const call of delta.tool_calls ?? []) {
+        const index = call.index ?? 0;
+        let partial = partialCalls[index];
+        if (partial === undefined) {
+          partial = { id: "", name: "", arguments: "" };
+          partialCalls[index] = partial;
+        }
+        if (call.id !== undefined) {
+          partial.id = call.id;
+        }
+        if (call.function?.name !== undefined) {
+          partial.name = call.function.name;
+        }
+        if (call.function?.arguments !== undefined) {
+          partial.arguments += call.function.arguments;
+        }
+      }
+    }
+
+    const toolCalls: ToolCall[] = [];
+    for (const call of partialCalls) {
+      if (call !== undefined && call.id.length > 0 && call.name.length > 0) {
+        toolCalls.push({
+          id: call.id,
+          name: call.name,
+          arguments: call.arguments,
+        });
+      }
+    }
+
+    const content = text.trim();
     if (content.length === 0 && toolCalls.length === 0) {
       throw new Error("OpenAI 未返回文本内容。");
     }
