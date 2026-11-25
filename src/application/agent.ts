@@ -1,17 +1,17 @@
 import type { AgentContext } from "../domain/agent";
-import type { ChatModel } from "./ports/chat-model";
+import type { AgentLoop } from "./agent-loop";
 
 export class Agent {
-  private pending: Promise<void> = Promise.resolve();
+  private turnQueue: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly context: AgentContext,
-    private readonly model: ChatModel,
+    private readonly loop: AgentLoop,
   ) {}
 
   complete(input: string): Promise<string> {
-    const turn = this.pending.then(() => this.completeTurn(input));
-    this.pending = turn.then(
+    const turn = this.turnQueue.then(() => this.completeTurn(input));
+    this.turnQueue = turn.then(
       () => undefined,
       () => undefined,
     );
@@ -24,18 +24,6 @@ export class Agent {
       throw new Error("输入不能为空。");
     }
 
-    const userMessage = { role: "user", content } as const;
-    const history = await this.context.getMessages();
-    const messages = [...history, userMessage];
-    const prepared = this.context.prepareMessages
-      ? await this.context.prepareMessages(messages)
-      : messages;
-    const answer = await this.model.complete(prepared);
-
-    await this.context.addMessages([
-      userMessage,
-      { role: "assistant", content: answer },
-    ]);
-    return answer;
+    return this.loop.complete(this.context, { role: "user", content });
   }
 }

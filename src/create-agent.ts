@@ -1,12 +1,16 @@
 import { createChatModel } from "./adapter/models/create-chat-model";
 import { Agent } from "./application/agent";
+import { AgentLoop } from "./application/agent-loop";
 import { AgentRunner } from "./application/agent-runner";
 import type { AgentContext } from "./domain/agent";
-import type { ModelInfo } from "./domain/model";
+import type { ModelConfig } from "./domain/model";
+import type { Tool } from "./domain/tool";
 
 export function createAgent<TContext extends AgentContext>(
   context: TContext,
-  model: ModelInfo,
+  modelConfig: ModelConfig,
+  tools: readonly Tool[] = [],
 ): Agent {
-  return new Agent(context, new AgentRunner(model, createChatModel));
+  const runner = new AgentRunner(modelConfig, createChatModel);
+  return new Agent(context, new AgentLoop(runner, tools));
 }

@@ -1,6 +1,6 @@
 export type ModelProvider = "openai" | "anthropic";
 
-export interface ModelInfo {
+export interface ModelConfig {
   readonly provider: ModelProvider;
   readonly name: string;
   readonly apiKey: string;
