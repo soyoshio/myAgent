@@ -1,8 +1,7 @@
 import "dotenv/config";
 import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
-import { createAgent, InMemoryContext } from "./index";
-import type { ModelInfo } from "./domain/model";
+import { ClockTool, createAgent, InMemoryContext, type ModelConfig } from "./index";
 
 function requiredEnvironment(name: string): string {
   const value = process.env[name];
@@ -13,7 +12,7 @@ function requiredEnvironment(name: string): string {
   return value;
 }
 
-function createModelInfo(): ModelInfo {
+function loadModelConfigFromEnv(): ModelConfig {
   const provider = (process.env.MODEL_PROVIDER ?? "openai").toLowerCase();
 
   switch (provider) {
@@ -45,7 +44,8 @@ async function main(): Promise<void> {
     new InMemoryContext([
       { role: "system", content: "你是一个简洁、友好的中文智能体。" },
     ]),
-    createModelInfo(),
+    loadModelConfigFromEnv(),
+    [new ClockTool()],
   );
 
   const question = process.argv.slice(2).join(" ").trim();
