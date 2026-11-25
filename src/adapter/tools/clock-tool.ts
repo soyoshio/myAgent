@@ -1,6 +1,6 @@
 import { AbstractAgentTool } from "../../application/agent-tool";
 
-/** 返回当前时间。是否调用由模型通过 tool call 决定。 */
+/** 读取本地日期和时间，供模型按需调用。 */
 export class ClockTool extends AbstractAgentTool {
   readonly name = "clock";
   readonly description = "获取当前的日期和时间。";

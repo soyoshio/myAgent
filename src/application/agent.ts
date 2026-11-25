@@ -9,8 +9,10 @@ export class Agent {
     private readonly loop: AgentLoop,
   ) {}
 
+  /** 按调用顺序执行一轮对话，返回最终回复。 */
   complete(input: string): Promise<string> {
     const turn = this.turnQueue.then(() => this.completeTurn(input));
+    // 本轮失败交给调用方处理，队列仍可继续执行下一轮。
     this.turnQueue = turn.then(
       () => undefined,
       () => undefined,
