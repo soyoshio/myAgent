@@ -2,51 +2,20 @@
 
 一个使用 TypeScript 编写的简单智能体库，按领域层、应用层和适配层组织代码，支持 OpenAI 与 Anthropic。
 
-## 目录结构
+## 安装
 
-```text
-src/
-├── domain/
-│   ├── context.ts                  # 消息（含工具调用）与历史读写接口
-│   ├── agent.ts                    # 用户上下文、运行期配置与解析接口
-│   ├── model.ts                    # 模型配置与厂商类型
-│   └── tool.ts                     # 工具契约（元数据 + execute）
-├── application/
-│   ├── agent.ts                    # Agent 入口，串行执行每一轮
-│   ├── agent-loop.ts               # 智能体循环：调模型、执行工具、再调模型
-│   ├── agent-tool.ts               # AbstractAgentTool 基类
-│   └── ports/
-│       ├── agent-model-factory.ts  # 模型工厂接口
-│       └── chat-model.ts           # 模型接口（接收工具、返回工具调用）
-├── adapter/
-│   ├── context/
-│   │   └── in-memory-context.ts    # 内存上下文实现
-│   ├── models/
-│   │   ├── openai-model.ts         # OpenAI API
-│   │   ├── anthropic-model.ts      # Anthropic API
-│   │   └── create-chat-model.ts    # 按厂商实例化模型
-│   └── tools/
-│       └── clock-tool.ts           # 基于 AbstractAgentTool 的时钟工具
-├── create-agent.ts                 # 组合适配器与应用层
-├── cli.ts                          # 命令行入口
-└── index.ts                        # 公共 API 导出
+要求 Node.js 22 或更高版本。首个版本发布到 npm 后，在你自己的项目目录安装：
+
+```sh
+npm install small-agent
 ```
 
-- `domain` 定义用户上下文、运行期配置（`AgentRuntime`）、对话消息、模型配置和工具契约。`Tool` 包含名称、描述、参数 Schema 以及 `execute(input, context)`。对话消息是判别联合：`system` / `user` / `assistant`（可带 `toolCalls`）/ `tool`（带 `toolCallId`）。
-- `application` 负责智能体循环：把历史和本轮消息连同工具定义交给模型，模型请求工具时执行并回填，直到模型给出最终文本。`AgentLoop` 组织循环（默认最多 8 轮），支持一次性与流式调用；每轮开始时按 `AgentRuntime` 实例化模型。
-- `adapter` 实现厂商 API、内存历史存储和具体工具。OpenAI / Anthropic 适配器会把工具定义注入请求，并把模型返回的工具调用解析成统一的 `ToolCall`。
-- `create-agent.ts` 组装适配器和应用层，提供 `createAgent(context, runtime)`，`runtime` 是 `AgentRuntime`。
-- `index.ts` 只作为包入口，导出公共 API 和类型。
-- `cli.ts` 是命令行启动入口。
+## 快速开始
 
-## 使用
+在项目根目录创建 `.env`，写入 `OPENAI_API_KEY=你的密钥`。将以下代码保存为 `app.mjs`：
 
-要求 Node.js 22 或更高版本。
-
-### 创建 Agent
-
-```ts
-import { createAgent, InMemoryContext, type ModelConfig } from "small-agent";
+```js
+import { createAgent, InMemoryContext } from "small-agent";
 
 const apiKey = process.env.OPENAI_API_KEY;
 if (!apiKey) throw new Error("请设置 OPENAI_API_KEY 环境变量。");
@@ -55,14 +24,20 @@ const context = new InMemoryContext([
   { role: "system", content: "你是一个简洁、友好的中文智能体。" },
 ]);
 
-const modelConfig: ModelConfig = {
+const modelConfig = {
   provider: "openai",
   name: "gpt-4o-mini",
   apiKey,
   baseURL: "https://api.openai.com/v1",
 };
 const agent = createAgent(context, { model: modelConfig, tools: [] });
-const answer = await agent.complete("你好");
+console.log(await agent.complete("你好"));
+```
+
+运行后，终端会打印模型的回复。
+
+```sh
+node --env-file=.env app.mjs
 ```
 
 `createAgent` 的第二个参数是 `AgentRuntime`，即 `{ model, tools, maxSteps? }`；未使用工具时传入 `tools: []`，`maxSteps`（每轮最多模型请求数）默认为 8。
@@ -226,6 +201,43 @@ class ModelAwareContext extends InMemoryContext {
 - `addMessages()` 在整轮成功后一次性保存本轮用户消息、工具调用/结果和模型回复。自定义存储应将一轮的消息一起提交。准备阶段加入的临时消息只用于当前请求。
 
 同一个 Agent 的 `complete()` 和 `stream()` 按调用顺序执行。每段独立对话请传入独立的上下文实例。`InMemoryContext` 的历史会在上下文实例存续期间保留。
+
+## 目录结构
+
+```text
+src/
+├── domain/
+│   ├── context.ts                  # 消息（含工具调用）与历史读写接口
+│   ├── agent.ts                    # 用户上下文、运行期配置与解析接口
+│   ├── model.ts                    # 模型配置与厂商类型
+│   └── tool.ts                     # 工具契约（元数据 + execute）
+├── application/
+│   ├── agent.ts                    # Agent 入口，串行执行每一轮
+│   ├── agent-loop.ts               # 智能体循环：调模型、执行工具、再调模型
+│   ├── agent-tool.ts               # AbstractAgentTool 基类
+│   └── ports/
+│       ├── agent-model-factory.ts  # 模型工厂接口
+│       └── chat-model.ts           # 模型接口（接收工具、返回工具调用）
+├── adapter/
+│   ├── context/
+│   │   └── in-memory-context.ts    # 内存上下文实现
+│   ├── models/
+│   │   ├── openai-model.ts         # OpenAI API
+│   │   ├── anthropic-model.ts      # Anthropic API
+│   │   └── create-chat-model.ts    # 按厂商实例化模型
+│   └── tools/
+│       └── clock-tool.ts           # 基于 AbstractAgentTool 的时钟工具
+├── create-agent.ts                 # 组合适配器与应用层
+├── cli.ts                          # 命令行入口
+└── index.ts                        # 公共 API 导出
+```
+
+- `domain` 定义用户上下文、运行期配置（`AgentRuntime`）、对话消息、模型配置和工具契约。`Tool` 包含名称、描述、参数 Schema 以及 `execute(input, context)`。对话消息是判别联合：`system` / `user` / `assistant`（可带 `toolCalls`）/ `tool`（带 `toolCallId`）。
+- `application` 负责智能体循环：把历史和本轮消息连同工具定义交给模型，模型请求工具时执行并回填，直到模型给出最终文本。`AgentLoop` 组织循环（默认最多 8 轮），支持一次性与流式调用；每轮开始时按 `AgentRuntime` 实例化模型。
+- `adapter` 实现厂商 API、内存历史存储和具体工具。OpenAI / Anthropic 适配器会把工具定义注入请求，并把模型返回的工具调用解析成统一的 `ToolCall`。
+- `create-agent.ts` 组装适配器和应用层，提供 `createAgent(context, runtime)`，`runtime` 是 `AgentRuntime`。
+- `index.ts` 只作为包入口，导出公共 API 和类型。
+- `cli.ts` 是命令行启动入口。
 
 ## 在源码仓库运行 CLI
 
