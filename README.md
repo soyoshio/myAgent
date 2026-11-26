@@ -61,11 +61,11 @@ const modelConfig: ModelConfig = {
   apiKey,
   baseURL: "https://api.openai.com/v1",
 };
-const agent = createAgent(context, { model: modelConfig });
+const agent = createAgent(context, { model: modelConfig, tools: [] });
 const answer = await agent.complete("你好");
 ```
 
-`createAgent` 的第二个参数是 `AgentRuntime`，即 `{ model, tools, maxSteps? }`；`tools` 默认为空，`maxSteps`（每轮最多模型请求数）默认为 8。
+`createAgent` 的第二个参数是 `AgentRuntime`，即 `{ model, tools, maxSteps? }`；未使用工具时传入 `tools: []`，`maxSteps`（每轮最多模型请求数）默认为 8。
 
 ### 工具
 
@@ -209,8 +209,9 @@ class ModelAwareContext extends InMemoryContext {
 
   override prepareMessages(
     messages: readonly ChatMessage[],
-    runtime: AgentRuntime,
+    runtime?: AgentRuntime,
   ): readonly ChatMessage[] {
+    if (!runtime) return messages;
     // 根据 runtime 修改上下文自身状态
     this.lastModel = runtime.model.name;
     return runtime.tools.length > 0
@@ -226,7 +227,7 @@ class ModelAwareContext extends InMemoryContext {
 
 同一个 Agent 的 `complete()` 和 `stream()` 按调用顺序执行。每段独立对话请传入独立的上下文实例。`InMemoryContext` 的历史会在上下文实例存续期间保留。
 
-## 命令行运行
+## 在源码仓库运行 CLI
 
 命令行入口会自动加载项目根目录的 `.env`，并从中读取模型配置：
 
@@ -263,3 +264,5 @@ npm start -- "你好"
 npm run typecheck
 npm run build
 ```
+
+在仓库根目录运行 `npm pack` 会生成本地 npm 压缩包。打包前会清理 `dist/`，再从 `src/index.ts` 编译库和类型声明。CLI 可通过 `npm start` 在仓库中运行。
