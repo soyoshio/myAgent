@@ -1,5 +1,5 @@
 {
-  "name": "myagent",
+  "name": "small-agent",
   "version": "1.0.0",
   "description": "基于领域、应用和适配层的简单智能体",
   "main": "dist/index.js",
@@ -12,14 +12,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/soyoshio/myAgent.git"
+    "url": "git+https://github.com/soyoshio/small-agent.git"
   },
   "keywords": [],
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/soyoshio/myAgent/issues"
+    "url": "https://github.com/soyoshio/small-agent/issues"
   },
-  "homepage": "https://github.com/soyoshio/myAgent#readme",
+  "homepage": "https://github.com/soyoshio/small-agent#readme",
   "dependencies": {
     "dotenv": "^18.0.10",
     "openai": "^7.59.0"

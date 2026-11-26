@@ -1,4 +1,4 @@
-# myAgent
+# small-agent
 
 一个使用 TypeScript 编写的简单智能体库，按领域层、应用层和适配层组织代码，支持 OpenAI 与 Anthropic。
 
@@ -46,7 +46,7 @@ src/
 ### 创建 Agent
 
 ```ts
-import { createAgent, InMemoryContext, type ModelConfig } from "myagent";
+import { createAgent, InMemoryContext, type ModelConfig } from "small-agent";
 
 const apiKey = process.env.OPENAI_API_KEY;
 if (!apiKey) throw new Error("请设置 OPENAI_API_KEY 环境变量。");
@@ -72,7 +72,7 @@ const answer = await agent.complete("你好");
 工具让**模型**决定是否调用（原生 tool call）：`AgentLoop` 把工具定义连同消息发给模型，模型返回 `toolCalls` 时执行对应工具、把结果作为 `tool` 消息回填，然后再次请求模型，直到模型不再请求工具。适配层已提供一个可直接使用的 `ClockTool`：
 
 ```ts
-import { ClockTool, createAgent } from "myagent";
+import { ClockTool, createAgent } from "small-agent";
 
 const agentWithTools = createAgent(context, { model: modelConfig, tools: [new ClockTool()] });
 ```
@@ -80,7 +80,7 @@ const agentWithTools = createAgent(context, { model: modelConfig, tools: [new Cl
 自定义工具推荐继承 `AbstractAgentTool`，只需提供元数据并实现 `execute`：
 
 ```ts
-import { AbstractAgentTool } from "myagent";
+import { AbstractAgentTool } from "small-agent";
 
 interface WeatherInput {
   city: string;
@@ -108,7 +108,7 @@ const agentWithWeather = createAgent(context, { model: modelConfig, tools: [new 
 `Tool` 是工具契约：`execute(input, context)` 依赖当前 `AgentContext`。`AbstractAgentTool<TInput>` 是可选的基类，用 `TInput` 描述 `execute` 的入参类型并约束元数据；不继承它也可以直接以对象实现 `Tool`：
 
 ```ts
-import type { Tool } from "myagent";
+import type { Tool } from "small-agent";
 
 const clock: Tool = {
   name: "clock",
@@ -146,7 +146,7 @@ interface AgentRuntime {
 希望每轮动态决定模型、工具或轮数上限，实现 `prepare` 即可。它收到的 `messages` 是「历史 + 本轮用户消息」，可据此换模型、调整 `maxSteps`：
 
 ```ts
-import { createAgent, type AgentRuntime } from "myagent";
+import { createAgent, type AgentRuntime } from "small-agent";
 
 const runtime: AgentRuntime = {
   model: strongModelConfig,
@@ -181,7 +181,7 @@ for await (const delta of agent.stream("你好")) {
 实现 `AgentContext`，或者继承 `InMemoryContext`。`InMemoryContext` 默认原样返回本轮消息，子类可以覆盖 `prepareMessages()`——它既能基于固定数据（如项目名称）注入消息，也能依据本轮的 `runtime` 调整上下文与消息。
 
 ```ts
-import { InMemoryContext, type ChatMessage } from "myagent";
+import { InMemoryContext, type ChatMessage } from "small-agent";
 
 class ProjectContext extends InMemoryContext {
   constructor(readonly projectName: string) {
@@ -196,13 +196,13 @@ class ProjectContext extends InMemoryContext {
   }
 }
 
-const projectContext = new ProjectContext("myAgent");
+const projectContext = new ProjectContext("small-agent");
 ```
 
 需要依据本轮运行期配置（模型、工具、轮数上限）修改上下文时，`prepareMessages` 的第二个参数就是解析后的 `runtime`：
 
 ```ts
-import { InMemoryContext, type AgentRuntime, type ChatMessage } from "myagent";
+import { InMemoryContext, type AgentRuntime, type ChatMessage } from "small-agent";
 
 class ModelAwareContext extends InMemoryContext {
   lastModel = "";
